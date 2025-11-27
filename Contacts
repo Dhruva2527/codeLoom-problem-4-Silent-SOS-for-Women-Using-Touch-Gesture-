@@ -1,0 +1,221 @@
+import React, { useState } from 'react';
+import { base44 } from '@/api/base44Client';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { motion, AnimatePresence } from 'framer-motion';
+import { ArrowLeft, Plus, Users, Shield, Phone } from 'lucide-react';
+import { Link } from 'react-router-dom';
+import { createPageUrl } from '@/utils';
+import { Button } from '@/components/ui/button';
+import ContactCard from '@/components/contacts/ContactCard';
+import ContactForm from '@/components/contacts/ContactForm';
+
+export default function Contacts() {
+  const [showForm, setShowForm] = useState(false);
+  const [editingContact, setEditingContact] = useState(null);
+  const queryClient = useQueryClient();
+
+  const { data: contacts = [], isLoading } = useQuery({
+    queryKey: ['emergency-contacts'],
+    queryFn: () => base44.entities.EmergencyContact.list()
+  });
+
+  const createMutation = useMutation({
+    mutationFn: (data) => base44.entities.EmergencyContact.create(data),
+    onSuccess: () => {
+      queryClient.invalidateQueries(['emergency-contacts']);
+      setShowForm(false);
+      setEditingContact(null);
+    }
+  });
+
+  const updateMutation = useMutation({
+    mutationFn: ({ id, data }) => base44.entities.EmergencyContact.update(id, data),
+    onSuccess: () => {
+      queryClient.invalidateQueries(['emergency-contacts']);
+      setShowForm(false);
+      setEditingContact(null);
+    }
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: (id) => base44.entities.EmergencyContact.delete(id),
+    onSuccess: () => queryClient.invalidateQueries(['emergency-contacts'])
+  });
+
+  const handleSave = async (formData) => {
+    if (editingContact) {
+      updateMutation.mutate({ id: editingContact.id, data: formData });
+    } else {
+      createMutation.mutate(formData);
+    }
+  };
+
+  const handleSetPrimary = async (contact) => {
+    // First, unset all other primary contacts
+    const primaryContacts = contacts.filter(c => c.is_primary && c.id !== contact.id);
+    for (const c of primaryContacts) {
+      await base44.entities.EmergencyContact.update(c.id, { is_primary: false });
+    }
+    // Set the new primary
+    await base44.entities.EmergencyContact.update(contact.id, { is_primary: true });
+    queryClient.invalidateQueries(['emergency-contacts']);
+  };
+
+  const handleEdit = (contact) => {
+    setEditingContact(contact);
+    setShowForm(true);
+  };
+
+  const handleDelete = (contact) => {
+    if (window.confirm(`Remove ${contact.name} from emergency contacts?`)) {
+      deleteMutation.mutate(contact.id);
+    }
+  };
+
+  const primaryContact = contacts.find(c => c.is_primary);
+
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-rose-50 via-white to-purple-50">
+      {/* Header */}
+      <header className="sticky top-0 z-10 bg-white/80 backdrop-blur-lg border-b border-gray-100">
+        <div className="px-6 py-4">
+          <div className="flex items-center gap-4">
+            <Link to={createPageUrl('Home')}>
+              <motion.button
+                whileTap={{ scale: 0.95 }}
+                className="w-10 h-10 bg-gray-100 rounded-full flex items-center justify-center"
+              >
+                <ArrowLeft className="w-5 h-5 text-gray-600" />
+              </motion.button>
+            </Link>
+            <div className="flex-1">
+              <h1 className="text-xl font-bold text-gray-800">Wellness Buddies</h1>
+              <p className="text-sm text-gray-400">Your support network</p>
+            </div>
+          </div>
+        </div>
+      </header>
+
+      <main className="px-6 py-6 pb-24">
+        {/* Quick Call Banner */}
+        {primaryContact && (
+          <motion.a
+            href={`tel:${primaryContact.phone}`}
+            initial={{ opacity: 0, y: -20 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="block mb-6"
+          >
+            <div className="bg-gradient-to-r from-rose-500 to-pink-500 rounded-2xl p-4 text-white">
+              <div className="flex items-center gap-4">
+                <div className="w-12 h-12 bg-white/20 rounded-full flex items-center justify-center">
+                  <Phone className="w-6 h-6" />
+                </div>
+                <div className="flex-1">
+                  <p className="text-sm text-white/80">Quick call primary contact</p>
+                  <p className="font-semibold text-lg">{primaryContact.name}</p>
+                </div>
+                <motion.div
+                  animate={{ x: [0, 5, 0] }}
+                  transition={{ repeat: Infinity, duration: 1.5 }}
+                >
+                  <Phone className="w-6 h-6" />
+                </motion.div>
+              </div>
+            </div>
+          </motion.a>
+        )}
+
+        {/* Empty State */}
+        {!isLoading && contacts.length === 0 && (
+          <motion.div
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            className="text-center py-16"
+          >
+            <div className="w-20 h-20 bg-rose-100 rounded-full flex items-center justify-center mx-auto mb-6">
+              <Users className="w-10 h-10 text-rose-400" />
+            </div>
+            <h2 className="text-xl font-semibold text-gray-800 mb-2">
+              Add Your Support Network
+            </h2>
+            <p className="text-gray-400 mb-8 max-w-xs mx-auto">
+              Add trusted contacts who will be notified during emergencies
+            </p>
+            <Button
+              onClick={() => setShowForm(true)}
+              className="bg-rose-500 hover:bg-rose-600"
+            >
+              <Plus className="w-5 h-5 mr-2" />
+              Add First Contact
+            </Button>
+          </motion.div>
+        )}
+
+        {/* Contact List */}
+        {contacts.length > 0 && (
+          <div className="space-y-3">
+            {contacts.map((contact, index) => (
+              <ContactCard
+                key={contact.id}
+                contact={contact}
+                index={index}
+                onEdit={handleEdit}
+                onDelete={handleDelete}
+                onSetPrimary={handleSetPrimary}
+              />
+            ))}
+          </div>
+        )}
+
+        {/* Info Box */}
+        {contacts.length > 0 && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ delay: 0.5 }}
+            className="mt-8 p-4 bg-amber-50 rounded-2xl border border-amber-100"
+          >
+            <div className="flex gap-3">
+              <Shield className="w-5 h-5 text-amber-500 flex-shrink-0 mt-0.5" />
+              <div>
+                <p className="text-sm font-medium text-amber-800">How it works</p>
+                <p className="text-xs text-amber-600 mt-1">
+                  When you trigger an SOS, all contacts will receive your live location. 
+                  Your primary contact will also receive an automatic phone call.
+                </p>
+              </div>
+            </div>
+          </motion.div>
+        )}
+      </main>
+
+      {/* Add Button */}
+      {contacts.length > 0 && (
+        <motion.button
+          initial={{ scale: 0 }}
+          animate={{ scale: 1 }}
+          whileTap={{ scale: 0.95 }}
+          onClick={() => setShowForm(true)}
+          className="fixed bottom-6 right-6 w-14 h-14 bg-rose-500 text-white rounded-full shadow-lg flex items-center justify-center"
+        >
+          <Plus className="w-6 h-6" />
+        </motion.button>
+      )}
+
+      {/* Contact Form Modal */}
+      <AnimatePresence>
+        {showForm && (
+          <ContactForm
+            contact={editingContact}
+            onSave={handleSave}
+            onClose={() => {
+              setShowForm(false);
+              setEditingContact(null);
+            }}
+            isLoading={createMutation.isPending || updateMutation.isPending}
+          />
+        )}
+      </AnimatePresence>
+    </div>
+  );
+}

@@ -1,0 +1,338 @@
+import React, { useState, useEffect } from 'react';
+import { base44 } from '@/api/base44Client';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { motion } from 'framer-motion';
+import { 
+  ArrowLeft, Shield, Bell, Battery, Smartphone, 
+  Hand, Vibrate, Eye, EyeOff, Lock, MessageSquare,
+  Save, Check, AlertCircle
+} from 'lucide-react';
+import { Link } from 'react-router-dom';
+import { createPageUrl } from '@/utils';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Switch } from '@/components/ui/switch';
+import { Slider } from '@/components/ui/slider';
+import { Textarea } from '@/components/ui/textarea';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+
+export default function Settings() {
+  const [showSafeWord, setShowSafeWord] = useState(false);
+  const [isSaved, setIsSaved] = useState(false);
+  const queryClient = useQueryClient();
+
+  const { data: settingsList = [], isLoading } = useQuery({
+    queryKey: ['user-settings'],
+    queryFn: () => base44.entities.UserSettings.list()
+  });
+
+  const existingSettings = settingsList[0];
+
+  const [settings, setSettings] = useState({
+    tap_pattern_enabled: true,
+    tap_count: 5,
+    shake_enabled: true,
+    shake_threshold: 3,
+    low_battery_alert: true,
+    battery_threshold: 10,
+    disguise_mode: 'wellness',
+    safe_word: '',
+    custom_message: "I need help! This is an emergency. Please check my location."
+  });
+
+  useEffect(() => {
+    if (existingSettings) {
+      setSettings({
+        tap_pattern_enabled: existingSettings.tap_pattern_enabled ?? true,
+        tap_count: existingSettings.tap_count ?? 5,
+        shake_enabled: existingSettings.shake_enabled ?? true,
+        shake_threshold: existingSettings.shake_threshold ?? 3,
+        low_battery_alert: existingSettings.low_battery_alert ?? true,
+        battery_threshold: existingSettings.battery_threshold ?? 10,
+        disguise_mode: existingSettings.disguise_mode ?? 'wellness',
+        safe_word: existingSettings.safe_word ?? '',
+        custom_message: existingSettings.custom_message ?? "I need help! This is an emergency."
+      });
+    }
+  }, [existingSettings]);
+
+  const saveMutation = useMutation({
+    mutationFn: async (data) => {
+      if (existingSettings?.id) {
+        return base44.entities.UserSettings.update(existingSettings.id, data);
+      } else {
+        return base44.entities.UserSettings.create(data);
+      }
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries(['user-settings']);
+      setIsSaved(true);
+      setTimeout(() => setIsSaved(false), 2000);
+    }
+  });
+
+  const handleSave = () => {
+    saveMutation.mutate(settings);
+  };
+
+  const updateSetting = (key, value) => {
+    setSettings(prev => ({ ...prev, [key]: value }));
+  };
+
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-rose-50 via-white to-purple-50">
+      {/* Header */}
+      <header className="sticky top-0 z-10 bg-white/80 backdrop-blur-lg border-b border-gray-100">
+        <div className="px-6 py-4">
+          <div className="flex items-center gap-4">
+            <Link to={createPageUrl('Home')}>
+              <motion.button
+                whileTap={{ scale: 0.95 }}
+                className="w-10 h-10 bg-gray-100 rounded-full flex items-center justify-center"
+              >
+                <ArrowLeft className="w-5 h-5 text-gray-600" />
+              </motion.button>
+            </Link>
+            <div className="flex-1">
+              <h1 className="text-xl font-bold text-gray-800">Settings</h1>
+              <p className="text-sm text-gray-400">Customize your safety</p>
+            </div>
+            <Button
+              onClick={handleSave}
+              disabled={saveMutation.isPending}
+              className={`${isSaved ? 'bg-green-500' : 'bg-rose-500'} hover:bg-rose-600`}
+            >
+              {isSaved ? (
+                <>
+                  <Check className="w-4 h-4 mr-2" />
+                  Saved
+                </>
+              ) : (
+                <>
+                  <Save className="w-4 h-4 mr-2" />
+                  Save
+                </>
+              )}
+            </Button>
+          </div>
+        </div>
+      </header>
+
+      <main className="px-6 py-6 pb-24 space-y-6">
+        {/* SOS Triggers Section */}
+        <section className="bg-white rounded-2xl p-5 shadow-sm">
+          <div className="flex items-center gap-3 mb-5">
+            <div className="w-10 h-10 bg-rose-100 rounded-xl flex items-center justify-center">
+              <Hand className="w-5 h-5 text-rose-500" />
+            </div>
+            <div>
+              <h2 className="font-semibold text-gray-800">SOS Triggers</h2>
+              <p className="text-xs text-gray-400">Configure how to activate emergency</p>
+            </div>
+          </div>
+
+          {/* Tap Pattern */}
+          <div className="space-y-4">
+            <div className="flex items-center justify-between py-3 border-b border-gray-100">
+              <div>
+                <p className="font-medium text-gray-700">Tap Pattern</p>
+                <p className="text-xs text-gray-400">Tap screen multiple times</p>
+              </div>
+              <Switch
+                checked={settings.tap_pattern_enabled}
+                onCheckedChange={(v) => updateSetting('tap_pattern_enabled', v)}
+              />
+            </div>
+
+            {settings.tap_pattern_enabled && (
+              <div className="pl-4 border-l-2 border-rose-200">
+                <Label className="text-sm text-gray-600">
+                  Number of taps: {settings.tap_count}
+                </Label>
+                <Slider
+                  value={[settings.tap_count]}
+                  onValueChange={([v]) => updateSetting('tap_count', v)}
+                  min={3}
+                  max={10}
+                  step={1}
+                  className="mt-2"
+                />
+              </div>
+            )}
+
+            {/* Shake Detection */}
+            <div className="flex items-center justify-between py-3 border-b border-gray-100">
+              <div>
+                <p className="font-medium text-gray-700">Shake Detection</p>
+                <p className="text-xs text-gray-400">Shake phone to trigger SOS</p>
+              </div>
+              <Switch
+                checked={settings.shake_enabled}
+                onCheckedChange={(v) => updateSetting('shake_enabled', v)}
+              />
+            </div>
+          </div>
+        </section>
+
+        {/* Battery Alert Section */}
+        <section className="bg-white rounded-2xl p-5 shadow-sm">
+          <div className="flex items-center gap-3 mb-5">
+            <div className="w-10 h-10 bg-amber-100 rounded-xl flex items-center justify-center">
+              <Battery className="w-5 h-5 text-amber-500" />
+            </div>
+            <div>
+              <h2 className="font-semibold text-gray-800">Low Battery Alert</h2>
+              <p className="text-xs text-gray-400">Auto-alert when battery is low</p>
+            </div>
+          </div>
+
+          <div className="flex items-center justify-between py-3 border-b border-gray-100">
+            <div>
+              <p className="font-medium text-gray-700">Enable Low Battery SOS</p>
+              <p className="text-xs text-gray-400">Send location when battery critical</p>
+            </div>
+            <Switch
+              checked={settings.low_battery_alert}
+              onCheckedChange={(v) => updateSetting('low_battery_alert', v)}
+            />
+          </div>
+
+          {settings.low_battery_alert && (
+            <div className="mt-4">
+              <Label className="text-sm text-gray-600">
+                Battery threshold: {settings.battery_threshold}%
+              </Label>
+              <Slider
+                value={[settings.battery_threshold]}
+                onValueChange={([v]) => updateSetting('battery_threshold', v)}
+                min={5}
+                max={20}
+                step={5}
+                className="mt-2"
+              />
+            </div>
+          )}
+        </section>
+
+        {/* Disguise Mode */}
+        <section className="bg-white rounded-2xl p-5 shadow-sm">
+          <div className="flex items-center gap-3 mb-5">
+            <div className="w-10 h-10 bg-purple-100 rounded-xl flex items-center justify-center">
+              <Smartphone className="w-5 h-5 text-purple-500" />
+            </div>
+            <div>
+              <h2 className="font-semibold text-gray-800">Disguise Mode</h2>
+              <p className="text-xs text-gray-400">App appearance to outsiders</p>
+            </div>
+          </div>
+
+          <Select
+            value={settings.disguise_mode}
+            onValueChange={(v) => updateSetting('disguise_mode', v)}
+          >
+            <SelectTrigger>
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="wellness">
+                <div className="flex items-center gap-2">
+                  <span>🧘</span>
+                  <span>Wellness App</span>
+                </div>
+              </SelectItem>
+              <SelectItem value="calculator">
+                <div className="flex items-center gap-2">
+                  <span>🔢</span>
+                  <span>Calculator</span>
+                </div>
+              </SelectItem>
+              <SelectItem value="notes">
+                <div className="flex items-center gap-2">
+                  <span>📝</span>
+                  <span>Notes App</span>
+                </div>
+              </SelectItem>
+            </SelectContent>
+          </Select>
+        </section>
+
+        {/* Safe Word */}
+        <section className="bg-white rounded-2xl p-5 shadow-sm">
+          <div className="flex items-center gap-3 mb-5">
+            <div className="w-10 h-10 bg-green-100 rounded-xl flex items-center justify-center">
+              <Lock className="w-5 h-5 text-green-500" />
+            </div>
+            <div>
+              <h2 className="font-semibold text-gray-800">Safe Word</h2>
+              <p className="text-xs text-gray-400">Cancel SOS with secret word</p>
+            </div>
+          </div>
+
+          <div className="relative">
+            <Input
+              type={showSafeWord ? 'text' : 'password'}
+              value={settings.safe_word}
+              onChange={(e) => updateSetting('safe_word', e.target.value)}
+              placeholder="Enter a safe word"
+              className="pr-10"
+            />
+            <button
+              type="button"
+              onClick={() => setShowSafeWord(!showSafeWord)}
+              className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400"
+            >
+              {showSafeWord ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+            </button>
+          </div>
+          <p className="text-xs text-gray-400 mt-2">
+            You'll need to enter this word to cancel an active SOS
+          </p>
+        </section>
+
+        {/* Emergency Message */}
+        <section className="bg-white rounded-2xl p-5 shadow-sm">
+          <div className="flex items-center gap-3 mb-5">
+            <div className="w-10 h-10 bg-blue-100 rounded-xl flex items-center justify-center">
+              <MessageSquare className="w-5 h-5 text-blue-500" />
+            </div>
+            <div>
+              <h2 className="font-semibold text-gray-800">Emergency Message</h2>
+              <p className="text-xs text-gray-400">Message sent to contacts</p>
+            </div>
+          </div>
+
+          <Textarea
+            value={settings.custom_message}
+            onChange={(e) => updateSetting('custom_message', e.target.value)}
+            placeholder="Enter your emergency message"
+            rows={3}
+          />
+          <p className="text-xs text-gray-400 mt-2">
+            Your location link will be automatically added
+          </p>
+        </section>
+
+        {/* Warning Box */}
+        <div className="bg-amber-50 rounded-2xl p-4 border border-amber-100">
+          <div className="flex gap-3">
+            <AlertCircle className="w-5 h-5 text-amber-500 flex-shrink-0" />
+            <div>
+              <p className="text-sm font-medium text-amber-800">Important</p>
+              <p className="text-xs text-amber-600 mt-1">
+                Test your SOS triggers regularly to ensure they work. Make sure your 
+                emergency contacts know they may receive alerts from this app.
+              </p>
+            </div>
+          </div>
+        </div>
+      </main>
+    </div>
+  );
+}
